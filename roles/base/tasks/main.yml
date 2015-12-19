@@ -3,7 +3,33 @@
   group: name=atalanta
 
 - name: Create 'atalanta' user
-  user: name=atalanta group=atalanta home=/home/atalanta
+  user: name=atalanta groups=atalanta,sudo home=/home/atalanta
 
 - name: Allow 'atalanta' to log in with ssh key
   authorized_key: user=atalanta key=https://github.com/Atalanta.keys
+
+- name: Permit passwordless sudo
+  lineinfile:
+    dest: /etc/sudoers
+    line: "%sudo	ALL=(ALL:ALL) NOPASSWD: ALL"
+    state: present
+    validate: "/usr/sbin/visudo -cf %s"
+
+- name: Install fail2ban
+  apt: pkg=fail2ban state=latest update_cache=true
+  notify:
+    - restart fail2ban
+
+- name: Create local fail2ban config
+  command: cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.conf.local
+
+- name: Whitelist Atalanta IP
+  lineinfile:
+    dest: /etc/fail2ban/jail.conf.local
+    line: "ignoreip = 127.0.0.1/8 82.69.169.150"
+    state: present
+  notify:
+    - restart fail2ban
+
+- name: ensure fail2ban starts on a fresh reboot
+  service: name=fail2ban state=started enabled=yes
