@@ -1,0 +1,63 @@
+---
+- name: Install the Apache webserver
+  apt: name=apache2 state=present
+
+- name: Apache service state
+  service: name=apache2 state=started enabled=yes
+
+- name: Disable keepalives
+  lineinfile:
+    dest: /etc/apache2/apache2.conf
+    line: "KeepAlive Off"
+    state: present
+    validate: "apachectl -f %s -t"
+  notify: restart apache2
+
+- name: Tune prefork module
+  template: src=mpm_prefork.conf dest=/etc/apache2/mods-available/mpm_prefork.conf
+  notify: restart apache2
+
+- name: Create local my.cnf
+  template: src=local_my.cnf dest=/root/.my.cnf
+
+- name: Install MySQL
+  apt: name={{ item }} state=present
+  with_items:
+    - mysql-server
+    - python-mysqldb
+
+- name: Configure MySQL root user pass and privileges
+  mysql_user: name=root host={{ item }} password=VerySecurePassword priv=*.*:ALL,GRANT
+  with_items:
+  - 127.0.0.1
+  - ::1
+  - localhost
+  - "{{ ansible_fqdn }}"
+
+- name: Delete anonymous MySQL user for ansible_fqdn
+  mysql_user: user="" host={{ ansible_fqdn }} state=absent
+
+- name: Delete anonymous MySQL user for localhost
+  mysql_user: user="" state=absent
+
+- name: Remove the MySQL test database
+  mysql_db: db=test state=absent
+
+- name: Start MySQL Service
+  service: name=mysql state=started enabled=yes
+
+- name: Install PHP
+  apt: name={{ item }} state=present
+  with_items:
+  - php5
+  - php-pear
+  - php5-mysql
+
+- name: Configure logging for PHP
+  lineinfile:
+    dest: /etc/php5/apache2/php.ini
+    line: "error_log = /var/log/php/error.log"
+    state: present
+
+- name: Create PHP logs directory
+  file: path=/var/log/php owner=www-data state=directory
