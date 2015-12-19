@@ -1,0 +1,6 @@
+---
+- name: Create 'atalanta' group
+  group: name=atalanta
+
+- name: Create 'atalanta' user
+  user: name=atalanta group=atalanta home=/home/atalanta
