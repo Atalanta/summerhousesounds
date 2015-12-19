@@ -4,3 +4,6 @@
 
 - name: Create 'atalanta' user
   user: name=atalanta group=atalanta home=/home/atalanta
+
+- name: Allow 'atalanta' to log in with ssh key
+  authorized_key: user=atalanta key=https://github.com/Atalanta.keys
