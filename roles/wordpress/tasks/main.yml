@@ -1,0 +1,97 @@
+---
+- name: Create wordpress group
+  group: name=wordpress
+
+- name: Create wordpress user
+  user:
+    name: wordpress
+    home: /home/wordpress
+    group: wordpress
+    generate_ssh_key: yes
+    ssh_key_file: /home/wordpress/wp_rsa
+
+- name: Ensure webserver can use ssh keys
+  file: path=/home/wordpress/{{ item }} group=www-data mode=0640
+  with_items:
+    - wp_rsa
+    - wp_rsa.pub
+
+- name: Download WordPress
+  get_url: url=http://wordpress.org/latest.tar.gz dest=/var/cache/wordpress-latest.tar.gz
+
+- name: Extract archive
+  command: chdir=/var/www /bin/tar xvf /var/cache/wordpress-latest.tar.gz creates=/var/www/wordpress/wp-config-sample.php
+
+- name: Create WordPress database
+  mysql_db: name=wordpress state=present
+
+- name: Create WordPress database user
+  mysql_user: name=wordpress password={{ mysql_root_password }} priv=wordpress.*:ALL host='localhost' state=present
+
+- name: Copy WordPress config file
+  template: src=wp-config.php dest=/var/www/wordpress
+
+- name: Create wordpress Apache logs directory
+  file: path=/var/www/wordpress/logs owner=wordpress group=wordpress state=directory
+
+- name: Change ownership of WordPress installation
+  file: path=/var/www/wordpress/ owner=wordpress group=wordpress state=directory recurse=yes
+
+- name: Create wordpress Apache logs directory
+  file: path=/var/www/wordpress/logs owner=wordpress group=wordpress state=directory
+
+- name: Create Wordpress VirtualHost
+  template: src=wordpress.conf dest=/etc/apache2/sites-available/wordpress.conf
+  notify: restart apache2
+
+- name: Enable Wordpress VirtualHost
+  command: a2ensite wordpress.conf
+  args:
+    creates: /etc/apache2/sites-enabled/wordpress.conf
+  notify: restart apache2
+
+- name: Create .ssh directory
+  file: path=/home/wordpress/.ssh owner=wordpress group=wordpress mode=0700 state=directory 
+
+- name: Capture public key
+  shell: cat /home/wordpress/wp_rsa.pub 
+  register: public_key
+
+- name: Permit only local login using wordpress ssh keys
+  authorized_key: 
+    user: wordpress
+    key: "{{ public_key.stdout }}"
+    key_options: 'from="127.0.0.1"'
+
+- name: Set permissions for authorized_key
+  file: path=/home/wordpress/.ssh/authorized_keys owner=wordpress group=wordpress mode=0644
+
+- name: Create wordpress content mountpoint for upload
+  file: path=/home/sftp/wp-content state=directory
+
+- name: Bind mount wordpress content into summerhousesounds chroot
+  mount: 
+    name: /home/sftp/wp-content
+    src: /var/www/wordpress/wp-content
+    fstype: none
+    opts: bind 
+    state: mounted
+
+- name: Check summerhousesounds group membership
+  shell: id summerhousesounds | grep -q wordpress
+  ignore_errors: True
+  register: wordpress_group_membership
+
+- name: Make summerhousesounds a member of the wordpress group
+  command: gpasswd -a summerhousesounds wordpress
+  when: wordpress_group_membership.rc != 0
+
+- name: Install ssh libraries
+  apt: name={{ item }} state=present
+  with_items:
+    - php5-dev
+    - libssh2-1-dev
+    - libssh2-php
+  notify: restart apache2
+
+
