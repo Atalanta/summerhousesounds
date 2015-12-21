@@ -4,3 +4,6 @@
 
 - name: restart sshd
   service: name=ssh state=restarted
+
+- name: save ruleset 
+  command: /usr/sbin/ferm /etc/ferm/ferm.conf

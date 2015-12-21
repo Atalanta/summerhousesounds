@@ -1,4 +1,17 @@
 ---
+- name: Preconfigure Ferm
+  debconf: name=ferm question='enable' value=true vtype='select'
+
+- name: Install ferm
+  apt: name=ferm state=present
+
+- name: Create firewall ruleset
+  template: 
+    dest: /etc/ferm/ferm.conf 
+    src: ferm.conf
+    validate: "/usr/sbin/ferm %s --lines"
+  notify: save ruleset
+
 - name: Create 'atalanta' group
   group: name=atalanta
 
