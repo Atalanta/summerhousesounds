@@ -1,3 +1,3 @@
 [client]
 user=root
-password=VerySecurePassword
+password="{{ mysql_root_password }}"

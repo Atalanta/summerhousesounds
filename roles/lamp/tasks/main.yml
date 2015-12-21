@@ -2,7 +2,7 @@
 - name: Install the Apache webserver
   apt: name=apache2 state=present
 
-- name: Apache service state
+- name: Start and enable Apache service
   service: name=apache2 state=started enabled=yes
 
 - name: Disable keepalives
@@ -17,8 +17,23 @@
   template: src=mpm_prefork.conf dest=/etc/apache2/mods-available/mpm_prefork.conf
   notify: restart apache2
 
-- name: Create local my.cnf
-  template: src=local_my.cnf dest=/root/.my.cnf
+- name: Check Apache MPM
+  shell: a2query -m | grep ^mpm
+  register: apache2_mpm
+  ignore_errors: True
+
+- name: Disable Event MPM
+  apache2_module: name=mpm_event state=absent
+  when: apache2_mpm.stdout | search('event')
+
+- name: Check Apache MPM
+  shell: a2query -m | grep ^mpm
+  register: apache2_mpm
+  ignore_errors: True
+
+- name: Enable Prefork MPM
+  apache2_module: name=mpm_prefork state=present
+  when: apache2_mpm.rc == 1
 
 - name: Install MySQL
   apt: name={{ item }} state=present
@@ -27,13 +42,28 @@
     - python-mysqldb
 
 - name: Configure MySQL root user pass and privileges
-  mysql_user: name=root host={{ item }} password=VerySecurePassword priv=*.*:ALL,GRANT
+  mysql_user:
+    name: root 
+    host: "{{ item }}"
+    password: "{{ mysql_root_password }}" 
+    priv: "*.*:ALL,GRANT"
+    state: present
   with_items:
   - 127.0.0.1
   - ::1
   - localhost
-  - "{{ ansible_fqdn }}"
 
+- name: Create local my.cnf
+  template: src=local_my.cnf dest=/root/.my.cnf
+
+- name: Configure MySQL root user pass and privileges for ansible_fqdn
+  mysql_user:
+    name: root 
+    host: "{{ ansible_fqdn }}"
+    password: "{{ mysql_root_password }}" 
+    priv: "*.*:ALL,GRANT"
+    state: present
+  
 - name: Delete anonymous MySQL user for ansible_fqdn
   mysql_user: user="" host={{ ansible_fqdn }} state=absent
 
@@ -43,8 +73,11 @@
 - name: Remove the MySQL test database
   mysql_db: db=test state=absent
 
-- name: Start MySQL Service
+- name: Start and enable MySQL Service
   service: name=mysql state=started enabled=yes
+
+- name: Start and enable Apache Service
+  service: name=apache2 state=started enabled=yes
 
 - name: Install PHP
   apt: name={{ item }} state=present
